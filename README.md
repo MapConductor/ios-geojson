@@ -26,7 +26,7 @@ When developing inside the MapConductor SDK repository, add the package as a loc
 Package dependency:
 
 ```swift
-.package(path: "../ios-geojson-layer")
+.package(path: "./ios-geojson-layer")
 ```
 
 Then add the product to your app target:
