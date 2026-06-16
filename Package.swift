@@ -1,0 +1,32 @@
+// swift-tools-version: 5.9
+import Foundation
+import PackageDescription
+
+let usingLocalCore = FileManager.default.fileExists(atPath: "../ios-sdk-core/Package.swift")
+let coreDependency: Package.Dependency = usingLocalCore
+    ? .package(path: "../ios-sdk-core")
+    : .package(url: "https://github.com/MapConductor/ios-sdk-core", from: "1.0.0")
+
+let package = Package(
+    name: "mapconductor-geojson-layer",
+    platforms: [
+        .iOS(.v15),
+    ],
+    products: [
+        .library(
+            name: "MapConductorGeoJSON",
+            targets: ["MapConductorGeoJSON"]
+        ),
+    ],
+    dependencies: [
+        coreDependency,
+    ],
+    targets: [
+        .target(
+            name: "MapConductorGeoJSON",
+            dependencies: [
+                .product(name: "MapConductorCore", package: "ios-sdk-core"),
+            ]
+        ),
+    ]
+)
