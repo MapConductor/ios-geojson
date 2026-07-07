@@ -55,6 +55,11 @@ public final class GeoJSONTileRenderer: TileProvider {
         }
     }
 
+    public struct GeoJSONHitTestResult {
+        public let feature: GeoJSONFeature
+        public let position: GeoPoint
+    }
+
     private struct RenderFeature {
         let source: GeoJSONFeature
         let worldGeometry: WorldGeometry
@@ -167,7 +172,11 @@ public final class GeoJSONTileRenderer: TileProvider {
     // MARK: - Hit testing
 
     /// Returns the topmost feature at the given geographic coordinates, or nil.
-    public func hitTest(longitude: Double, latitude: Double) -> GeoJSONFeature? {
+    ///
+    /// Pass `lineTolSq` and `pointTolSq` (squared world-coordinate tolerances) to override the
+    /// default hit tolerances. Prefer using ``GeoJSONLayerState/processClick(geoPoint:pixelTolerance:zoom:)``
+    /// which converts a pixel tolerance automatically.
+    public func hitTest(longitude: Double, latitude: Double, lineTolSq: Double? = nil, pointTolSq: Double? = nil) -> GeoJSONHitTestResult? {
         let wx = lonToWorld(longitude)
         let wy = latToWorld(latitude)
 
@@ -175,18 +184,30 @@ public final class GeoJSONTileRenderer: TileProvider {
         let state = currentState
         stateLock.unlock()
 
-        let tol = GeoJSONDefaults.hitLineTolerance
+        let lineTol = lineTolSq.map { $0.squareRoot() } ?? GeoJSONDefaults.hitLineTolerance
+        let pointTol = pointTolSq.map { $0.squareRoot() } ?? GeoJSONDefaults.hitPointTolerance
+        let tol = max(lineTol, pointTol)
         let candidates = state.index?.query(x1: wx - tol, y1: wy - tol, x2: wx + tol, y2: wy + tol)
             ?? Array(state.features.indices)
 
-        for idx in candidates {
+        for idx in candidates.reversed() {
             let feature = state.features[idx]
             guard feature.bounds.intersects(wx - tol, wy - tol, wx + tol, wy + tol) else { continue }
-            if hitTestGeometry(wx: wx, wy: wy, geometry: feature.worldGeometry) {
-                return feature.source
+            if let hit = hitTestGeometry(wx: wx, wy: wy, geometry: feature.worldGeometry, lineTolSq: lineTolSq, pointTolSq: pointTolSq) {
+                return GeoJSONHitTestResult(
+                    feature: feature.source,
+                    position: GeoPoint.fromLongLat(
+                        longitude: worldToLon(hit.wx),
+                        latitude: worldToLat(hit.wy)
+                    )
+                )
             }
         }
         return nil
+    }
+
+    public func hitTestFeature(longitude: Double, latitude: Double, lineTolSq: Double? = nil, pointTolSq: Double? = nil) -> GeoJSONFeature? {
+        hitTest(longitude: longitude, latitude: latitude, lineTolSq: lineTolSq, pointTolSq: pointTolSq)?.feature
     }
 
     // MARK: - Internal rendering
@@ -330,26 +351,74 @@ public final class GeoJSONTileRenderer: TileProvider {
 
     // MARK: - Hit testing helpers
 
-    private func hitTestGeometry(wx: Double, wy: Double, geometry: WorldGeometry) -> Bool {
+    private struct GeometryHit {
+        let wx: Double
+        let wy: Double
+        let distanceSq: Double
+    }
+
+    private func hitTestGeometry(wx: Double, wy: Double, geometry: WorldGeometry, lineTolSq: Double? = nil, pointTolSq: Double? = nil) -> GeometryHit? {
+        let effectivePointTolSq = pointTolSq ?? GeoJSONDefaults.hitPointSq
         switch geometry {
         case .point(let gx, let gy):
-            return distanceSq(wx, wy, gx, gy) <= GeoJSONDefaults.hitPointSq
+            let d = distanceSq(wx, wy, gx, gy)
+            return d <= effectivePointTolSq ? GeometryHit(wx: gx, wy: gy, distanceSq: d) : nil
         case .points(let pts):
-            return pts.contains { distanceSq(wx, wy, $0.wx, $0.wy) <= GeoJSONDefaults.hitPointSq }
-        case .line(let rings):
-            return rings.contains { ring in
-                zip(ring, ring.dropFirst()).contains { a, b in
-                    segmentDistanceSq(px: wx, py: wy, ax: a.wx, ay: a.wy, bx: b.wx, by: b.wy) <= GeoJSONDefaults.hitLineSq
+            var best: GeometryHit?
+            for point in pts {
+                let d = distanceSq(wx, wy, point.wx, point.wy)
+                if d <= effectivePointTolSq,
+                   best == nil || d < best!.distanceSq {
+                    best = GeometryHit(wx: point.wx, wy: point.wy, distanceSq: d)
                 }
             }
+            return best
+        case .line(let rings):
+            return hitTestRings(wx: wx, wy: wy, rings: rings, lineTolSq: lineTolSq)
         case .polygon(let rings):
-            guard let exterior = rings.first, pointInRing(wx: wx, wy: wy, ring: exterior) else { return false }
+            if lineTolSq != nil {
+                return hitTestRings(wx: wx, wy: wy, rings: rings, lineTolSq: lineTolSq)
+            }
+            guard let exterior = rings.first, pointInRing(wx: wx, wy: wy, ring: exterior) else { return nil }
             return !rings.dropFirst().contains { pointInRing(wx: wx, wy: wy, ring: $0) }
+                ? GeometryHit(wx: wx, wy: wy, distanceSq: 0)
+                : nil
         case .collection(let parts):
-            return parts.contains { hitTestGeometry(wx: wx, wy: wy, geometry: $0) }
+            var best: GeometryHit?
+            for part in parts {
+                if let hit = hitTestGeometry(wx: wx, wy: wy, geometry: part, lineTolSq: lineTolSq, pointTolSq: pointTolSq),
+                   best == nil || hit.distanceSq < best!.distanceSq {
+                    best = hit
+                }
+            }
+            return best
         case .empty:
-            return false
+            return nil
         }
+    }
+
+    private func hitTestRings(wx: Double, wy: Double, rings: [[WorldPoint]], lineTolSq: Double? = nil) -> GeometryHit? {
+        var best: GeometryHit?
+        for ring in rings {
+            if let hit = hitTestLine(wx: wx, wy: wy, ring: ring, lineTolSq: lineTolSq),
+               best == nil || hit.distanceSq < best!.distanceSq {
+                best = hit
+            }
+        }
+        return best
+    }
+
+    private func hitTestLine(wx: Double, wy: Double, ring: [WorldPoint], lineTolSq: Double? = nil) -> GeometryHit? {
+        let effectiveLineTolSq = lineTolSq ?? GeoJSONDefaults.hitLineSq
+        var best: GeometryHit?
+        for (a, b) in zip(ring, ring.dropFirst()) {
+            let hit = closestPointOnSegment(px: wx, py: wy, ax: a.wx, ay: a.wy, bx: b.wx, by: b.wy)
+            if hit.distanceSq <= effectiveLineTolSq,
+               best == nil || hit.distanceSq < best!.distanceSq {
+                best = hit
+            }
+        }
+        return best
     }
 
     private func pointInRing(wx: Double, wy: Double, ring: [WorldPoint]) -> Bool {
@@ -366,13 +435,15 @@ public final class GeoJSONTileRenderer: TileProvider {
         return inside
     }
 
-    private func segmentDistanceSq(px: Double, py: Double,
-                                   ax: Double, ay: Double,
-                                   bx: Double, by: Double) -> Double {
+    private func closestPointOnSegment(px: Double, py: Double,
+                                       ax: Double, ay: Double,
+                                       bx: Double, by: Double) -> GeometryHit {
         let dx = bx - ax, dy = by - ay
-        if dx == 0 && dy == 0 { return distanceSq(px, py, ax, ay) }
+        if dx == 0 && dy == 0 { return GeometryHit(wx: ax, wy: ay, distanceSq: distanceSq(px, py, ax, ay)) }
         let t = max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
-        return distanceSq(px, py, ax + t * dx, ay + t * dy)
+        let wx = ax + t * dx
+        let wy = ay + t * dy
+        return GeometryHit(wx: wx, wy: wy, distanceSq: distanceSq(px, py, wx, wy))
     }
 
     private func distanceSq(_ ax: Double, _ ay: Double, _ bx: Double, _ by: Double) -> Double {
@@ -494,9 +565,15 @@ public final class GeoJSONTileRenderer: TileProvider {
 
     private func lonToWorld(_ lon: Double) -> Double { lon / 360.0 + 0.5 }
 
+    private func worldToLon(_ wx: Double) -> Double { (wx - 0.5) * 360.0 }
+
     private func latToWorld(_ lat: Double) -> Double {
         let siny = sin(lat * .pi / 180.0)
         let clipped = max(-0.9999, min(0.9999, siny))
         return 0.5 - log((1.0 + clipped) / (1.0 - clipped)) / (4.0 * .pi)
+    }
+
+    private func worldToLat(_ wy: Double) -> Double {
+        atan(sinh(.pi * (1.0 - 2.0 * wy))) * 180.0 / .pi
     }
 }

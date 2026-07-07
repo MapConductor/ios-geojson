@@ -91,10 +91,30 @@ public final class GeoJSONLayerState: ObservableObject {
         featureStateCancellables.append(publisher)
     }
 
-    public func processClick(geoPoint: GeoPoint) {
-        let feature = renderer.hitTest(longitude: geoPoint.longitude, latitude: geoPoint.latitude)
-        guard let feature else { return }
-        onClick?(feature, geoPoint)
+    /// Call from your map's click handler to perform feature hit-testing.
+    ///
+    /// Pass `pixelTolerance` and `zoom` to use a pixel-based hit threshold instead of the
+    /// default world-coordinate tolerances. For example,
+    /// `processClick(geoPoint: point, pixelTolerance: 15, zoom: zoom)` fires only when
+    /// the click is within 15 pixels of the nearest segment.
+    public func processClick(geoPoint: GeoPoint, pixelTolerance: Double? = nil, zoom: Double? = nil) {
+        var lineTolSq: Double?
+        var pointTolSq: Double?
+        if let px = pixelTolerance, let z = zoom {
+            let worldSize = Double(renderer.tileSize) * pow(2.0, z)
+            let lt = px / worldSize
+            let pt = px * 2.0 / worldSize
+            lineTolSq = lt * lt
+            pointTolSq = pt * pt
+        }
+        let hit = renderer.hitTest(
+            longitude: geoPoint.longitude,
+            latitude: geoPoint.latitude,
+            lineTolSq: lineTolSq,
+            pointTolSq: pointTolSq
+        )
+        guard let hit else { return }
+        onClick?(hit.feature, hit.position)
     }
 
     private func scheduleUpdate() {
