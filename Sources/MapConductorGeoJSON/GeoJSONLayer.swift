@@ -26,9 +26,15 @@ public struct GeoJSONLayer: ViewBasedMapOverlay, Identifiable {
         features: [GeoJSONFeature] = [],
         tileSize: Int = GeoJSONDefaults.defaultTileSize,
         opacity: Double = GeoJSONDefaults.defaultOpacity,
-        layerStyle: GeoJSONTileRenderer.LayerStyle = GeoJSONTileRenderer.LayerStyle()
+        layerStyle: GeoJSONTileRenderer.LayerStyle = GeoJSONTileRenderer.LayerStyle(),
+        styleProvider: any GeoJSONStyleProvider = DefaultGeoJSONStyleProvider.shared
     ) {
-        let state = GeoJSONLayerState(tileSize: tileSize, opacity: opacity, layerStyle: layerStyle)
+        let state = GeoJSONLayerState(
+            tileSize: tileSize,
+            opacity: opacity,
+            layerStyle: layerStyle,
+            styleProvider: styleProvider
+        )
         self.init(state, features: features)
     }
 

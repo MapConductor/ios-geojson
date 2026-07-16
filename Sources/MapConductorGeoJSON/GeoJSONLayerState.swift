@@ -7,6 +7,8 @@ public final class GeoJSONLayerState: ObservableObject {
     let renderer: GeoJSONTileRenderer
 
     public var onClick: ((GeoJSONFeature, GeoPoint) -> Void)?
+    public var onLoadStart: (() -> Void)?
+    public var onLoadComplete: ((Error?) -> Void)?
 
     public var opacity: Double {
         didSet { rasterLayerState.opacity = min(1.0, max(0.0, opacity)) }
@@ -24,6 +26,10 @@ public final class GeoJSONLayerState: ObservableObject {
         didSet { scheduleUpdate() }
     }
 
+    public var styleProvider: any GeoJSONStyleProvider {
+        didSet { scheduleUpdate() }
+    }
+
     private let groupId: String
     private let tileServer: LocalTileServer
     private var version: Int64 = 0
@@ -36,13 +42,21 @@ public final class GeoJSONLayerState: ObservableObject {
         opacity: Double = GeoJSONDefaults.defaultOpacity,
         minZoom: Int = 0,
         maxZoom: Int = GeoJSONDefaults.defaultMaxZoom,
-        layerStyle: GeoJSONTileRenderer.LayerStyle = GeoJSONTileRenderer.LayerStyle()
+        layerStyle: GeoJSONTileRenderer.LayerStyle = GeoJSONTileRenderer.LayerStyle(),
+        styleProvider: any GeoJSONStyleProvider = DefaultGeoJSONStyleProvider.shared,
+        onLoadStart: (() -> Void)? = nil,
+        onLoadComplete: ((Error?) -> Void)? = nil,
+        onClick: ((GeoJSONFeature, GeoPoint) -> Void)? = nil
     ) {
         let initialOpacity = min(1.0, max(0.0, opacity))
         self.opacity = opacity
         self.minZoom = minZoom
         self.maxZoom = maxZoom
         self.layerStyle = layerStyle
+        self.styleProvider = styleProvider
+        self.onLoadStart = onLoadStart
+        self.onLoadComplete = onLoadComplete
+        self.onClick = onClick
         self.groupId = UUID().uuidString
         self.tileServer = TileServerRegistry.get(forceNoStoreCache: false)
         self.renderer = GeoJSONTileRenderer(tileSize: tileSize)
@@ -69,10 +83,23 @@ public final class GeoJSONLayerState: ObservableObject {
     }
 
     public func setFeatures(_ features: [GeoJSONFeature]) {
+        beginLoading()
         updateQueue.async { [weak self] in
             guard let self else { return }
             self.lastFeatures = features
             self.applyUpdate(features: features)
+        }
+    }
+
+    public func beginLoading() {
+        DispatchQueue.main.async { [weak self] in
+            self?.onLoadStart?()
+        }
+    }
+
+    public func completeLoading(error: Error? = nil) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onLoadComplete?(error)
         }
     }
 
@@ -84,6 +111,7 @@ public final class GeoJSONLayerState: ObservableObject {
             .debounce(for: .milliseconds(50), scheduler: updateQueue)
             .sink { [weak self] _ in
                 guard let self else { return }
+                self.beginLoading()
                 let updated = states.map { $0.toFeature() }
                 self.lastFeatures = updated
                 self.applyUpdate(features: updated)
@@ -118,6 +146,7 @@ public final class GeoJSONLayerState: ObservableObject {
     }
 
     private func scheduleUpdate() {
+        beginLoading()
         updateQueue.async { [weak self] in
             guard let self else { return }
             self.applyUpdate(features: self.lastFeatures)
@@ -125,7 +154,11 @@ public final class GeoJSONLayerState: ObservableObject {
     }
 
     private func applyUpdate(features: [GeoJSONFeature]) {
-        renderer.update(features: features, layerStyle: layerStyle)
+        renderer.update(
+            features: features,
+            layerStyle: layerStyle,
+            styleProvider: styleProvider
+        )
         version += 1
         let nextVersion = version
         let tileSize = renderer.tileSize
@@ -142,6 +175,7 @@ public final class GeoJSONLayerState: ObservableObject {
             self.rasterLayerState.source = nextSource
             self.rasterLayerState.extra = nextVersion
             self.rasterLayerState.visible = shouldShowLayer
+            self.onLoadComplete?(nil)
         }
     }
 }

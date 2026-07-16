@@ -2,6 +2,8 @@
 import Foundation
 import PackageDescription
 
+let frameworkLibraryType: Product.Library.LibraryType? =
+    ProcessInfo.processInfo.environment["MAPCONDUCTOR_BUILD_XCFRAMEWORK"] == "1" ? .dynamic : nil
 let usingLocalCore = FileManager.default.fileExists(atPath: "../ios-sdk-core/Package.swift")
 let coreDependency: Package.Dependency = usingLocalCore
     ? .package(path: "../ios-sdk-core")
@@ -15,6 +17,7 @@ let package = Package(
     products: [
         .library(
             name: "MapConductorGeoJSON",
+            type: frameworkLibraryType,
             targets: ["MapConductorGeoJSON"]
         ),
     ],

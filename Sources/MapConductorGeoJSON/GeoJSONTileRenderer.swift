@@ -128,8 +128,14 @@ public final class GeoJSONTileRenderer: TileProvider {
 
     // MARK: - Update
 
-    public func update(features: [GeoJSONFeature], layerStyle: LayerStyle) {
-        let rendered = features.filter { $0.visible }.map { buildRenderFeature($0, layerStyle: layerStyle) }
+    public func update(
+        features: [GeoJSONFeature],
+        layerStyle: LayerStyle,
+        styleProvider: any GeoJSONStyleProvider = DefaultGeoJSONStyleProvider.shared
+    ) {
+        let rendered = features.filter { $0.visible }.map {
+            buildRenderFeature($0, layerStyle: layerStyle, styleProvider: styleProvider)
+        }
         let index = rendered.count >= Self.indexThreshold ? buildIndex(rendered) : nil
         stateLock.lock()
         currentState = TileState(features: rendered, index: index)
@@ -453,11 +459,12 @@ public final class GeoJSONTileRenderer: TileProvider {
 
     // MARK: - Build helpers
 
-    private func buildRenderFeature(_ feature: GeoJSONFeature, layerStyle: LayerStyle) -> RenderFeature {
-        let strokeColor = feature.strokeColor ?? layerStyle.strokeColor
-        let fillColor = feature.fillColor ?? layerStyle.fillColor
-        let strokeWidth = feature.strokeWidth ?? layerStyle.strokeWidth
-        let pointRadius = feature.pointRadius ?? layerStyle.pointRadius
+    private func buildRenderFeature(
+        _ feature: GeoJSONFeature,
+        layerStyle: LayerStyle,
+        styleProvider: any GeoJSONStyleProvider
+    ) -> RenderFeature {
+        let style = styleProvider.style(for: feature, defaultStyle: layerStyle)
         let worldGeometry = toWorldGeometry(feature.geometry)
         // Strip geometry from source: worldGeometry already holds all coordinates in world
         // space for rendering and hit-testing. Keeping lat/lon coords here doubles memory
@@ -467,10 +474,10 @@ public final class GeoJSONTileRenderer: TileProvider {
             source: stripped,
             worldGeometry: worldGeometry,
             bounds: computeBounds(worldGeometry),
-            fillColor: fillColor,
-            strokeColor: strokeColor,
-            strokeWidth: strokeWidth,
-            pointRadius: pointRadius
+            fillColor: style.fillColor,
+            strokeColor: style.strokeColor,
+            strokeWidth: style.strokeWidth,
+            pointRadius: style.pointRadius
         )
     }
 
