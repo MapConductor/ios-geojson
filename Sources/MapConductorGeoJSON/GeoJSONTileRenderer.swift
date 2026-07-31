@@ -154,7 +154,9 @@ public final class GeoJSONTileRenderer: TileProvider {
         epoch = cacheEpoch
         cacheLock.unlock()
 
-        let key = "\(epoch):\(request.z)/\(request.x)/\(request.y)" as NSString
+        let pixelRatio = max(1, min(request.pixelRatio, 3))
+        let normalizedRequest = TileRequest(x: request.x, y: request.y, z: request.z, pixelRatio: pixelRatio)
+        let key = "\(epoch):\(pixelRatio)x:\(request.z)/\(request.x)/\(request.y)" as NSString
         cacheLock.lock()
         let cached = cache.object(forKey: key)
         cacheLock.unlock()
@@ -164,7 +166,7 @@ public final class GeoJSONTileRenderer: TileProvider {
         let state = currentState
         stateLock.unlock()
 
-        let result = renderTileInternal(request: request, state: state)
+        let result = renderTileInternal(request: normalizedRequest, state: state)
 
         cacheLock.lock()
         if cacheEpoch == epoch {
@@ -242,7 +244,13 @@ public final class GeoJSONTileRenderer: TileProvider {
         func toPixelX(_ wx: Double) -> CGFloat { CGFloat(wx * worldSize - originX) }
         func toPixelY(_ wy: Double) -> CGFloat { CGFloat(wy * worldSize - originY) }
 
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: tileSize, height: tileSize))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = CGFloat(request.pixelRatio)
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(
+            size: CGSize(width: tileSize, height: tileSize),
+            format: format
+        )
         var hasContent = false
 
         let image = renderer.image { ctx in
@@ -417,11 +425,19 @@ public final class GeoJSONTileRenderer: TileProvider {
     private func hitTestLine(wx: Double, wy: Double, ring: [WorldPoint], lineTolSq: Double? = nil) -> GeometryHit? {
         let effectiveLineTolSq = lineTolSq ?? GeoJSONDefaults.hitLineSq
         var best: GeometryHit?
+        let testPoint = CGPoint(x: wx, y: wy)
         for (a, b) in zip(ring, ring.dropFirst()) {
-            let hit = closestPointOnSegment(px: wx, py: wy, ax: a.wx, ay: a.wy, bx: b.wx, by: b.wy)
-            if hit.distanceSq <= effectiveLineTolSq,
-               best == nil || hit.distanceSq < best!.distanceSq {
-                best = hit
+            let closest = closestPointOnSegment(
+                startPoint: CGPoint(x: a.wx, y: a.wy),
+                endPoint: CGPoint(x: b.wx, y: b.wy),
+                testPoint: testPoint
+            )
+            let cx = Double(closest.x)
+            let cy = Double(closest.y)
+            let dSq = distanceSq(wx, wy, cx, cy)
+            if dSq <= effectiveLineTolSq,
+               best == nil || dSq < best!.distanceSq {
+                best = GeometryHit(wx: cx, wy: cy, distanceSq: dSq)
             }
         }
         return best
@@ -439,17 +455,6 @@ public final class GeoJSONTileRenderer: TileProvider {
             j = i
         }
         return inside
-    }
-
-    private func closestPointOnSegment(px: Double, py: Double,
-                                       ax: Double, ay: Double,
-                                       bx: Double, by: Double) -> GeometryHit {
-        let dx = bx - ax, dy = by - ay
-        if dx == 0 && dy == 0 { return GeometryHit(wx: ax, wy: ay, distanceSq: distanceSq(px, py, ax, ay)) }
-        let t = max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
-        let wx = ax + t * dx
-        let wy = ay + t * dy
-        return GeometryHit(wx: wx, wy: wy, distanceSq: distanceSq(px, py, wx, wy))
     }
 
     private func distanceSq(_ ax: Double, _ ay: Double, _ bx: Double, _ by: Double) -> Double {
