@@ -71,8 +71,7 @@ public final class GeoJSONLayerState: ObservableObject {
             ),
             opacity: initialOpacity,
             visible: false,
-            id: "geojson-\(groupId)",
-            extra: Int64(0)
+            id: "geojson-\(groupId)"
         )
 
         tileServer.register(routeId: groupId, provider: renderer)
@@ -173,7 +172,6 @@ public final class GeoJSONLayerState: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.rasterLayerState.source = nextSource
-            self.rasterLayerState.extra = nextVersion
             self.rasterLayerState.visible = shouldShowLayer
             self.onLoadComplete?(nil)
         }
