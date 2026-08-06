@@ -108,7 +108,7 @@ public final class GeoJSONLayerState: ObservableObject {
         let features = states.map { $0.toFeature() }
         setFeatures(features)
         let publisher = Publishers.MergeMany(states.map { $0.asPublisher() })
-            .debounce(for: .milliseconds(50), scheduler: updateQueue)
+            .debounce(for: .milliseconds(Settings.Default.composeEventDebounce), scheduler: updateQueue)
             .sink { [weak self] _ in
                 guard let self else { return }
                 self.beginLoading()
