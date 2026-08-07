@@ -62,7 +62,7 @@ public final class GeoJSONLayerState: ObservableObject {
         self.renderer = GeoJSONTileRenderer(tileSize: tileSize)
 
         self.rasterLayerState = RasterLayerState(
-            source: RasterSource.urlTemplate(
+            source: RasterLayerSource.urlTemplate(
                 template: tileServer.urlTemplate(routeId: groupId, tileSize: tileSize, cacheKey: "0"),
                 tileSize: tileSize,
                 minZoom: minZoom,
@@ -161,7 +161,7 @@ public final class GeoJSONLayerState: ObservableObject {
         version += 1
         let nextVersion = version
         let tileSize = renderer.tileSize
-        let nextSource = RasterSource.urlTemplate(
+        let nextSource = RasterLayerSource.urlTemplate(
             template: tileServer.urlTemplate(routeId: groupId, tileSize: tileSize, cacheKey: String(nextVersion)),
             tileSize: tileSize,
             minZoom: minZoom,
