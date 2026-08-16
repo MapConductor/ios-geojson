@@ -4,7 +4,7 @@ Pod::Spec.new do |s|
   s.summary = "MapConductor's GeoJSON tile layer extension."
   s.license = { :type => "Apache-2.0", :file => "LICENSE" }
   s.author = "MapConductor"
-  s.homepage = "https://github.com/MapConductor/ios-geojson-layer"
+  s.homepage = "https://github.com/MapConductor/ios-geojson"
   s.source = { :path => __dir__ }
   s.platform = :ios, "15.1"
   s.swift_version = "5.9"
