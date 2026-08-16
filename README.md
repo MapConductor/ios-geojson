@@ -233,3 +233,4 @@ Build the package with an iOS destination, either from Xcode or from the command
 ```sh
 xcodebuild -scheme mapconductor-geojson -destination 'generic/platform=iOS Simulator' build
 ```
+
