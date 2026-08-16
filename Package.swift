@@ -10,7 +10,7 @@ let coreDependency: Package.Dependency = usingLocalCore
     : .package(url: "https://github.com/MapConductor/ios-sdk-core", from: "1.0.0")
 
 let package = Package(
-    name: "mapconductor-geojson-layer",
+    name: "mapconductor-geojson",
     platforms: [
         // See ios-sdk-core/Package.swift's comment: "15.0" must not be used here.
         .iOS("15.1"),

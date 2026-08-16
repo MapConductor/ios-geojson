@@ -1,6 +1,6 @@
 # MapConductor GeoJSON Layer
 
-`ios-geojson-layer` adds a tile-rendered GeoJSON overlay to MapConductor map views.
+`ios-geojson` adds a tile-rendered GeoJSON overlay to MapConductor map views.
 It parses GeoJSON data into feature models, renders the features through MapConductor's
 raster tile layer pipeline, and provides hit-testing for feature selection.
 
@@ -26,19 +26,19 @@ When developing inside the MapConductor SDK repository, add the package as a loc
 Package dependency:
 
 ```swift
-.package(path: "./ios-geojson-layer")
+.package(path: "./ios-geojson")
 ```
 
 Then add the product to your app target:
 
 ```swift
-.product(name: "MapConductorGeoJSON", package: "mapconductor-geojson-layer")
+.product(name: "MapConductorGeoJSON", package: "mapconductor-geojson")
 ```
 
 For published artifacts, use the configured MapConductor package URL:
 
 ```swift
-.package(url: "https://github.com/MapConductor/ios-geojson-layer", from: "<version>")
+.package(url: "https://github.com/MapConductor/ios-geojson", from: "<version>")
 ```
 
 The package depends on `MapConductorCore` and supports iOS 15 or later.
@@ -135,7 +135,7 @@ Individual `GeoJSONFeature` and `GeoJSONFeatureState` objects can override
 
 ## Touch Detection
 
-The layer keeps hit-testing in `ios-geojson-layer` and avoids changing MapConductor core.
+The layer keeps hit-testing in `ios-geojson` and avoids changing MapConductor core.
 Because MapConductor map views expose map click callbacks, apps should forward map clicks
 to the `GeoJSONLayerState` manually.
 
@@ -231,5 +231,5 @@ GeoJSONSeqParser.streamParse(fileURL: fileURL) { feature in
 Build the package with an iOS destination, either from Xcode or from the command line:
 
 ```sh
-xcodebuild -scheme mapconductor-geojson-layer -destination 'generic/platform=iOS Simulator' build
+xcodebuild -scheme mapconductor-geojson -destination 'generic/platform=iOS Simulator' build
 ```
