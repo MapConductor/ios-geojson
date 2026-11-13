@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name = "MapConductorGeoJSON"
-  s.version = "1.3.1"
+  s.version = "1.4.0"
   s.summary = "MapConductor's GeoJSON tile layer extension."
   s.license = { :type => "Apache-2.0", :file => "LICENSE" }
   s.author = "MapConductor"
@@ -10,5 +10,5 @@ Pod::Spec.new do |s|
   s.swift_version = "5.9"
   s.source_files = "Sources/MapConductorGeoJSON/**/*.swift"
   s.libraries = "z"
-  s.dependency "MapConductorCore"
+  s.dependency "MapConductorCore", "~> 1.4"
 end
